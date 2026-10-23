@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>엑셀/CSV 데이터 필터링 및 관리 도구</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (xlsx) CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- FontAwesome Icons CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        /* Custom scrollbar for table */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-emerald-600 text-white rounded-lg">
+                    <i class="fa-solid fa-file-excel text-xl"></i>
+                </div>
+                <h1 class="text-xl font-bold text-slate-800">엑셀/CSV 데이터 필터러</h1>
+            </div>
+            <div class="text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
+                <i class="fa-solid fa-shield-halved text-emerald-600 mr-1"></i> 서버 전송 없이 브라우저에서 안전하게 처리됩니다
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col gap-6">
+
+        <!-- File Upload Section -->
+        <section class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-cloud-arrow-up text-emerald-600"></i> 1. 파일 업로드 (XLSX, CSV)
+            </h2>
+            
+            <div id="drop-zone" class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50/50 hover:bg-slate-100/50 hover:border-emerald-500 transition-all cursor-pointer">
+                <input type="file" id="file-input" accept=".xlsx, .xls, .csv" class="hidden" />
+                <div class="flex flex-col items-center justify-center space-y-3">
+                    <div class="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl">
+                        <i class="fa-solid fa-file-csv"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-slate-700">클릭하거나 파일을 이곳에 드래그하세요</p>
+                        <p class="text-xs text-slate-400 mt-1">XLSX, XLS, CSV 파일 지원 (최대 지원 크기는 브라우저 메모리에 따름)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loaded File Status Bar -->
+            <div id="file-info" class="hidden mt-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg flex items-center justify-between text-sm">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-circle-check text-emerald-600"></i>
+                    <span id="file-name" class="font-medium">filename.xlsx</span>
+                    <span id="file-details" class="text-emerald-600 text-xs"></span>
+                </div>
+                <button id="reset-btn" class="text-xs text-slate-500 hover:text-red-600 font-medium transition">
+                    <i class="fa-solid fa-rotate-left mr-1"></i> 초기화
+                </button>
+            </div>
+        </section>
+
+        <!-- Data Processing & Filter Section -->
+        <section id="processing-section" class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm opacity-50 pointer-events-none transition-all">
+            <h2 class="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-filter text-emerald-600"></i> 2. 데이터 정제 및 검색 필터
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <!-- Checkbox Option: END_NM missing value removal -->
+                <div class="p-4 rounded-lg border border-amber-200 bg-amber-50/50 flex items-start gap-3 md:col-span-1">
+                    <input type="checkbox" id="remove-null-endnm" checked class="mt-1 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer">
+                    <div>
+                        <label for="remove-null-endnm" class="font-semibold text-slate-800 text-sm cursor-pointer select-none">
+                            <span class="text-amber-700">END_NM</span> 컬럼 결측치 제거
+                        </label>
+                        <p class="text-xs text-slate-500 mt-0.5">
+                            <code class="bg-amber-100 text-amber-800 px-1 py-0.5 rounded">END_NM</code> 값이 없거나 빈 문자열, N/A, null인 행을 자동으로 제외합니다.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Custom Keyword Filter Input -->
+                <div class="p-4 rounded-lg border border-slate-200 bg-slate-50 flex flex-col justify-between md:col-span-2">
+                    <label for="search-input" class="font-semibold text-slate-800 text-sm mb-1 block">
+                        전체 데이터 키워드 필터링
+                    </label>
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-sm"></i>
+                        <input type="text" id="search-input" placeholder="검색할 단어나 값을 입력하세요..." class="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Bar & Export Buttons -->
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-100">
+                <div class="flex items-center gap-4 text-sm text-slate-600 w-full sm:w-auto">
+                    <div>전체: <span id="total-count" class="font-bold text-slate-800">0</span>건</div>
+                    <div class="text-slate-300">|</div>
+                    <div>필터링 후: <span id="filtered-count" class="font-bold text-emerald-600">0</span>건</div>
+                    <div class="text-slate-300">|</div>
+                    <div>제거됨: <span id="removed-count" class="font-bold text-red-500">0</span>건</div>
+                </div>
+
+                <!-- Export Action Buttons -->
+                <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <button id="export-xlsx" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium shadow-sm transition flex items-center gap-2">
+                        <i class="fa-solid fa-file-excel"></i> XLSX 다운로드
+                    </button>
+                    <button id="export-csv" class="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-sm font-medium shadow-sm transition flex items-center gap-2">
+                        <i class="fa-solid fa-file-csv"></i> CSV 다운로드
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Preview Table Section -->
+        <section id="table-section" class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex-1 flex flex-col min-h-[350px]">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-table text-emerald-600"></i> 데이터 미리보기
+                    <span class="text-xs font-normal text-slate-400">(상위 100건만 표시됩니다)</span>
+                </h2>
+            </div>
+
+            <!-- Table Container -->
+            <div class="flex-1 overflow-auto border border-slate-200 rounded-lg max-h-[500px]">
+                <table id="data-table" class="w-full text-sm text-left text-slate-600">
+                    <thead class="text-xs text-slate-700 uppercase bg-slate-100 sticky top-0 border-b border-slate-200">
+                        <tr id="table-header">
+                            <th class="px-4 py-3 text-center text-slate-400">데이터가 없습니다</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="divide-y divide-slate-200">
+                        <tr>
+                            <td class="px-4 py-8 text-center text-slate-400">
+                                파일을 업로드하면 이곳에 데이터가 표시됩니다.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- Custom Modal for Notifications (Alert Replacement) -->
+    <div id="modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 p-6 border border-slate-100">
+            <div class="flex items-center gap-3 mb-3">
+                <div id="modal-icon-container" class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                    <i id="modal-icon" class="fa-solid fa-info text-lg"></i>
+                </div>
+                <h3 id="modal-title" class="text-lg font-bold text-slate-800">알림</h3>
+            </div>
+            <p id="modal-message" class="text-sm text-slate-600 mb-6">메시지 내용입니다.</p>
+            <div class="flex justify-end">
+                <button id="modal-close-btn" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition">
+                    확인
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        // Data State Management
+        let rawData = [];           // 원본 데이터
+        let filteredData = [];      // 필터링된 데이터
+        let headers = [];           // 테이블 헤더 (컬럼명 리스트)
+        let currentFileName = "";   // 현재 업로드된 파일명
+
+        // DOM Elements
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileInfo = document.getElementById('file-info');
+        const fileNameEl = document.getElementById('file-name');
+        const fileDetailsEl = document.getElementById('file-details');
+        const resetBtn = document.getElementById('reset-btn');
+
+        const processingSection = document.getElementById('processing-section');
+        const removeNullEndNmCheckbox = document.getElementById('remove-null-endnm');
+        const searchInput = document.getElementById('search-input');
+
+        const totalCountEl = document.getElementById('total-count');
+        const filteredCountEl = document.getElementById('filtered-count');
+        const removedCountEl = document.getElementById('removed-count');
+
+        const exportXlsxBtn = document.getElementById('export-xlsx');
+        const exportCsvBtn = document.getElementById('export-csv');
+
+        const tableHeader = document.getElementById('table-header');
+        const tableBody = document.getElementById('table-body');
+
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        modalMessage = document.getElementById('modal-message');
+        const modalIconContainer = document.getElementById('modal-icon-container');
+        const modalIcon = document.getElementById('modal-icon');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+
+        // Modal Function
+        function showAlert(title, message, isError = false) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            
+            if (isError) {
+                modalIconContainer.className = "w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0";
+                modalIcon.className = "fa-solid fa-triangle-exclamation text-lg";
+            } else {
+                modalIconContainer.className = "w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0";
+                modalIcon.className = "fa-solid fa-circle-check text-lg";
+            }
+            modal.classList.remove('hidden');
+        }
+
+        modalCloseBtn.addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+
+        // Event Listeners for File Upload
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-emerald-500', 'bg-emerald-50/30');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-emerald-500', 'bg-emerald-50/30');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-emerald-500', 'bg-emerald-50/30');
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        resetBtn.addEventListener('click', resetState);
+
+        // Filter Logic Trigger Events
+        removeNullEndNmCheckbox.addEventListener('change', applyFilters);
+        searchInput.addEventListener('input', applyFilters);
+
+        // Export Events
+        exportXlsxBtn.addEventListener('click', () => exportFile('xlsx'));
+        exportCsvBtn.addEventListener('click', () => exportFile('csv'));
+
+        // Reset Everything
+        function resetState() {
+            rawData = [];
+            filteredData = [];
+            headers = [];
+            currentFileName = "";
+            fileInput.value = "";
+            searchInput.value = "";
+
+            fileInfo.classList.add('hidden');
+            processingSection.classList.add('opacity-50', 'pointer-events-none');
+            
+            tableHeader.innerHTML = '<th class="px-4 py-3 text-center text-slate-400">데이터가 없습니다</th>';
+            tableBody.innerHTML = '<tr><td class="px-4 py-8 text-center text-slate-400">파일을 업로드하면 이곳에 데이터가 표시됩니다.</td></tr>';
+
+            totalCountEl.textContent = '0';
+            filteredCountEl.textContent = '0';
+            removedCountEl.textContent = '0';
+        }
+
+        // Handle Uploaded File
+        function handleFile(file) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (!['xlsx', 'xls', 'csv'].includes(ext)) {
+                showAlert('파일 형식 오류', 'XLSX, XLS, CSV 확장자 파일만 업로드할 수 있습니다.', true);
+                return;
+            }
+
+            currentFileName = file.name;
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    // 첫 번째 시트 사용
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    // JSON 변환 (defval: "" 으로 빈 셀 유지)
+                    const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+                    if (!json || json.length === 0) {
+                        showAlert('데이터 없음', '파일 내에 유효한 데이터가 존재하지 않습니다.', true);
+                        return;
+                    }
+
+                    rawData = json;
+                    headers = Object.keys(json[0]);
+
+                    // UI 업데이트
+                    fileNameEl.textContent = file.name;
+                    fileDetailsEl.textContent = `(${json.length.toLocaleString()}행, ${headers.length}개 컬럼)`;
+                    fileInfo.classList.remove('hidden');
+                    processingSection.classList.remove('opacity-50', 'pointer-events-none');
+
+                    // 필터링 적용
+                    applyFilters();
+
+                } catch (err) {
+                    console.error(err);
+                    showAlert('파일 읽기 실패', '파일을 해석하는 도중 오류가 발생했습니다.', true);
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Check if value is null, undefined, empty string or "N/A"
+        function isNullOrEmpty(val) {
+            if (val === null || val === undefined) return true;
+            const str = String(val).trim().toLowerCase();
+            return str === "" || str === "null" || str === "undefined" || str === "n/a";
+        }
+
+        // Apply All Active Filters
+        function applyFilters() {
+            if (!rawData.length) return;
+
+            const shouldRemoveNullEndNm = removeNullEndNmCheckbox.checked;
+            const keyword = searchInput.value.trim().toLowerCase();
+
+            // END_NM 대소문자 구분 없이 컬럼 존재 여부 확인
+            const endNmKey = headers.find(h => h.trim().toUpperCase() === 'END_NM');
+
+            filteredData = rawData.filter(row => {
+                // 1. END_NM 결측치 제거 로직
+                if (shouldRemoveNullEndNm && endNmKey) {
+                    const val = row[endNmKey];
+                    if (isNullOrEmpty(val)) {
+                        return false;
+                    }
+                }
+
+                // 2. 키워드 검색 로직 (모든 필드 탐색)
+                if (keyword !== "") {
+                    const match = headers.some(header => {
+                        const cellVal = String(row[header] || "").toLowerCase();
+                        return cellVal.includes(keyword);
+                    });
+                    if (!match) return false;
+                }
+
+                return true;
+            });
+
+            // Count Updates
+            const total = rawData.length;
+            const filtered = filteredData.length;
+            const removed = total - filtered;
+
+            totalCountEl.textContent = total.toLocaleString();
+            filteredCountEl.textContent = filtered.toLocaleString();
+            removedCountEl.textContent = removed.toLocaleString();
+
+            // Render Table Preview
+            renderTable();
+        }
+
+        // Render Table (Max 100 rows for performance)
+        function renderTable() {
+            // Header Rendering
+            tableHeader.innerHTML = headers.map(h => {
+                const isEndNm = h.trim().toUpperCase() === 'END_NM';
+                return `<th class="px-4 py-3 whitespace-nowrap ${isEndNm ? 'bg-amber-100 text-amber-900 font-bold border-x border-amber-200' : ''}">
+                    ${h} ${isEndNm ? '<span class="text-xs text-amber-700">(타겟)</span>' : ''}
+                </th>`;
+            }).join('');
+
+            // Body Rendering
+            if (filteredData.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="${headers.length}" class="px-4 py-8 text-center text-slate-400">조건에 일치하는 데이터가 없습니다.</td></tr>`;
+                return;
+            }
+
+            const previewData = filteredData.slice(0, 100);
+            tableBody.innerHTML = previewData.map(row => {
+                const cells = headers.map(h => {
+                    const isEndNm = h.trim().toUpperCase() === 'END_NM';
+                    const val = row[h] !== undefined ? row[h] : "";
+                    return `<td class="px-4 py-2.5 whitespace-nowrap border-b border-slate-100 ${isEndNm ? 'bg-amber-50/50 font-medium text-amber-900 border-x border-amber-100' : ''}">
+                        ${val}
+                    </td>`;
+                }).join('');
+                return `<tr class="hover:bg-slate-50 transition-colors">${cells}</tr>`;
+            }).join('');
+        }
+
+        // Export Data Function
+        function exportFile(format) {
+            if (!filteredData.length) {
+                showAlert('저장 불가', '저장할 데이터가 없습니다.', true);
+                return;
+            }
+
+            const worksheet = XLSX.utils.json_to_sheet(filteredData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Filtered_Data");
+
+            // Extract file name without extension
+            const baseName = currentFileName ? currentFileName.substring(0, currentFileName.lastIndexOf('.')) : 'data';
+            const saveFileName = `${baseName}_filtered.${format}`;
+
+            if (format === 'xlsx') {
+                XLSX.writeFile(workbook, saveFileName);
+            } else if (format === 'csv') {
+                XLSX.writeFile(workbook, saveFileName, { bookType: 'csv' });
+            }
+
+            showAlert('다운로드 완료', `성공적으로 '${saveFileName}' 파일이 생성되어 다운로드되었습니다.`);
+        }
+    </script>
+</body>
+</html>
